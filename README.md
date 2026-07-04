@@ -227,17 +227,6 @@ The test suite covers:
 npm test
 ```
 
-## Demo Video Checklist
-
-The demo video should be under 5 minutes and show:
-
-1. Floatline live on CROO Agent Store.
-2. The two services and their prices.
-3. A paid `floatline.score` order with JSON requirements.
-4. The provider logs accepting and delivering the order automatically.
-5. The delivered score JSON.
-6. Why the credit decision depends on CROO/CAP identity, order, wallet, and settlement primitives.
-
 ## Current Limitations
 
 - `floatline.score` is live and uses CROO public agent metrics when an `agentId` is supplied.
