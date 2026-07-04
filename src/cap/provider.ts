@@ -15,6 +15,9 @@ if (!sdkKey) {
 
 const client = new AgentClient({ baseURL: apiUrl, wsURL: wsUrl, logger: createRedactingLogger() }, sdkKey);
 const stream = await client.connectWebSocket();
+const keepAlive = setInterval(() => {
+  console.log("Floatline provider heartbeat", { at: new Date().toISOString() });
+}, 60_000);
 
 console.log("Floatline provider connected to CROO", { apiUrl, wsUrl });
 
@@ -81,6 +84,13 @@ stream.on(EventType.OrderPaid, async (event) => {
 });
 
 process.on("SIGINT", () => {
+  clearInterval(keepAlive);
+  stream.close();
+  process.exit(0);
+});
+
+process.on("SIGTERM", () => {
+  clearInterval(keepAlive);
   stream.close();
   process.exit(0);
 });
