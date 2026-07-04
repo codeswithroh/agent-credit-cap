@@ -1,99 +1,249 @@
 # Floatline CAP
 
-Working capital for autonomous agents on CROO CAP.
+CAP-native credit and liquidity rails for autonomous agents on CROO.
 
-Floatline is a CAP-native credit provider that advances small USDC amounts to agents against locked or paid CAP order flow. It helps agents accept jobs that require hiring downstream agents before their own parent order clears.
+Floatline helps agents decide who to hire, fund, or route work to before settlement clears. It exposes a cheap credit-scoring API for CROO agents and a working-capital quote service for agents that want to hire downstream CAP agents against paid order flow.
+
+## Live Links
+
+- CROO Agent Store: https://agent.croo.network/agents/d1f0a83a-569b-48f3-993d-cdc59d13564c
+- Public repo: https://github.com/codeswithroh/floatline-cap
+- License: MIT
 
 ## Hackathon Fit
 
 - Tracks: DeFi / On-chain Ops Agents, Developer Tooling Agents
 - Protocol: CROO Agent Protocol (CAP)
-- Settlement: USDC on Base through CROO CAP
-- License: MIT
+- Settlement: USDC on Base through CROO CAP escrow
+- Current status: live on CROO Agent Store and callable through paid CAP orders
 
 ## Why This Needs CAP
 
 Floatline makes credit decisions from commerce primitives that only exist in an agent transaction layer:
 
 - agent identity and wallet
-- service/order lifecycle
-- locked or paid order status
-- on-chain payment and settlement history
-- delivery and clearance reputation
+- service and order lifecycle
+- paid order status
+- on-chain payment and delivery receipts
+- completion, volume, and online reputation
 
-Without CAP, the lender would be trusting screenshots or private API claims. With CAP, the loan can be tied to verifiable order state and repayment receipts.
+Without CAP, an agent credit provider would be trusting screenshots or private claims. With CAP, the risk decision is tied to verifiable agent identity, service calls, paid orders, and settlement receipts.
 
-## Services
+## Live Services
 
 ### `floatline.score`
 
-Scores any CROO agent or wallet for short-term CAP credit exposure.
+- Service ID: `07bbb4e9-f29a-4e78-be41-f9eb93014744`
+- Price: `0.05` USDC
+- SLA: 10 minutes
+- Purpose: score any CROO agent or wallet for short-term CAP credit exposure.
 
-Inputs:
+Request:
 
-- `agentId` for a listed CROO agent, or caller-supplied wallet/order metrics
-- optional active paid-order count
+```json
+{
+  "agentId": "ec1bc7f5-4429-46d9-8d9f-72423dabfdf2"
+}
+```
 
-Outputs:
+Alternative request for caller-supplied metrics:
 
-- credit score and grade
-- eligible / watch / decline decision
-- recommended maximum exposure
-- signals and warnings used in the decision
+```json
+{
+  "walletAddress": "0x83e3821f79Ef3e2F9462FF43Bd71887c42Ef44f1",
+  "completedOrders": 12,
+  "failedOrders": 1,
+  "totalVolumeUsdc": 25,
+  "completionRate": 98,
+  "onlineStatus": "online",
+  "currentPaidOrders": 1
+}
+```
 
-This is the low-friction API surface: other agents can call it before hiring, routing funds, or extending credit.
+Response:
+
+```json
+{
+  "agentId": "ec1bc7f5-4429-46d9-8d9f-72423dabfdf2",
+  "walletAddress": "0xa16F422c4F815Ee89A0bE3fdf3A56cD7A165a9C2",
+  "score": 20,
+  "grade": "E",
+  "maxRecommendedExposureUsdc": 0,
+  "decision": "decline",
+  "signals": [
+    "online_status=online",
+    "completion_rate=0%",
+    "completed_orders=0",
+    "total_volume_usdc=0",
+    "current_paid_orders=0"
+  ],
+  "warnings": [
+    "limited_order_history",
+    "completion_rate_below_90",
+    "no_recorded_volume"
+  ],
+  "source": "croo_public_agent"
+}
+```
 
 ### `floatline.advance.quote`
 
-Returns a financing quote for a borrower agent.
+- Service ID: `5e22778b-63f4-406d-a0ac-33f6d18c8bf1`
+- Price: `0.10` USDC
+- SLA: 30 minutes
+- Purpose: quote a small working-capital advance for an agent that wants to hire downstream CAP agents before its own paid order clears.
 
-Inputs:
+Request:
 
-- borrower agent id
-- parent order id
-- requested advance amount
-- expected repayment order id or settlement source
+```json
+{
+  "borrowerAgentId": "agent_demo_borrower",
+  "parentOrderId": "order_parent_001",
+  "requestedAdvanceUsdc": 1,
+  "expectedSettlementUsdc": 4,
+  "completedOrders": 12,
+  "failedOrders": 1,
+  "currentPaidOrders": 1
+}
+```
 
-Outputs:
+Response:
 
-- approved / denied
-- max advance
-- fee
-- repayment due condition
-- risk reasons
+```json
+{
+  "approved": true,
+  "maxAdvanceUsdc": 1.6,
+  "feeUsdc": 0.05,
+  "repayUsdc": 1.05,
+  "riskScore": 90,
+  "reasons": [
+    "risk_score=90",
+    "repayment_coverage=4x",
+    "completed_orders=12",
+    "failed_orders=1"
+  ]
+}
+```
 
-### `floatline.advance.execute`
+## CAP Integration
 
-Planned transaction-bearing service that evaluates and records an approved working-capital advance.
+The provider is implemented in `src/cap/provider.ts` with `@croo-network/sdk`.
 
-Outputs:
+SDK methods used:
 
-- advance receipt
-- CAP order and receipt references
-- repayment terms
+- `new AgentClient(...)`
+- `connectWebSocket()`
+- `stream.on(EventType.NegotiationCreated, ...)`
+- `stream.on(EventType.OrderPaid, ...)`
+- `getNegotiation(...)`
+- `acceptNegotiation(...)`
+- `acceptNegotiationWithFundAddress(...)` for future fund-transfer services
+- `rejectNegotiation(...)`
+- `getOrder(...)`
+- `deliverOrder(...)`
+- `listOrders(...)` and `payOrder(...)` in the requester example
 
-### `floatline.repay`
+Runtime flow:
 
-Accepts borrower repayment through a CROO fund-transfer service and produces a structured repayment receipt.
+1. CROO emits `order_negotiation_created`.
+2. Floatline fetches the negotiation and accepts it.
+3. CROO creates the on-chain CAP order.
+4. Requester pays in USDC through CAP.
+5. CROO emits `order_paid`.
+6. Floatline reads the original requirements, calculates the score or quote, and calls `deliverOrder`.
+7. CROO records the delivery and settlement proof.
 
-Outputs:
+## Local Setup
 
-- principal repaid
-- fee paid
-- repayment status
-- receipt hash
+Requirements:
 
-## Local Development
+- Node.js 20+
+- CROO Agent Store SDK key
+- A registered CROO agent with service IDs
+
+Install:
 
 ```bash
 npm install
+```
+
+Configure:
+
+```bash
+cp .env.example .env
+```
+
+Set at minimum:
+
+```bash
+CROO_SDK_KEY=croo_sk_replace_me
+CROO_FLOATLINE_SCORE_SERVICE_ID=07bbb4e9-f29a-4e78-be41-f9eb93014744
+CROO_FLOATLINE_ADVANCE_QUOTE_SERVICE_ID=5e22778b-63f4-406d-a0ac-33f6d18c8bf1
+```
+
+Run checks:
+
+```bash
 npm run typecheck
+npm test
+npm run build
+```
+
+Start the provider:
+
+```bash
+npm run provider
+```
+
+Production-style local runner:
+
+```bash
+scripts/run-provider.sh
+```
+
+## Requester Example
+
+Create a real CAP negotiation against `floatline.score`:
+
+```bash
+npm run requester
+```
+
+By default this creates the negotiation but does not pay. To pay from the requester wallet bound to your SDK key:
+
+```bash
+FLOATLINE_PAY_ORDER=true npm run requester
+```
+
+## Tests
+
+The test suite covers:
+
+- deterministic advance quotes
+- deterministic credit scoring
+- CROO text requirement envelope parsing
+
+```bash
 npm test
 ```
 
-Create a local `.env` from `.env.example` and set `CROO_SDK_KEY` from the CROO Agent Store dashboard. Some CROO quick-start surfaces call the same value `CROO_API_KEY`; this repo accepts both. Do not commit `.env`.
+## Demo Video Checklist
 
-The CROO Node SDK and MCP server document `CROO_SDK_KEY`. See `docs/mcp.md`.
+The demo video should be under 5 minutes and show:
+
+1. Floatline live on CROO Agent Store.
+2. The two services and their prices.
+3. A paid `floatline.score` order with JSON requirements.
+4. The provider logs accepting and delivering the order automatically.
+5. The delivered score JSON.
+6. Why the credit decision depends on CROO/CAP identity, order, wallet, and settlement primitives.
+
+## Current Limitations
+
+- `floatline.score` is live and uses CROO public agent metrics when an `agentId` is supplied.
+- `floatline.advance.quote` is live and deterministic, but does not transfer funds.
+- `floatline.advance.execute` and `floatline.repay` are planned transaction-bearing services for the next milestone.
+- The provider is framework-agnostic and keeps execution sovereign; it only depends on CROO CAP for commerce, orders, and settlement.
 
 ## CROO Resources
 
@@ -102,7 +252,3 @@ The CROO Node SDK and MCP server document `CROO_SDK_KEY`. See `docs/mcp.md`.
 - Node SDK: https://github.com/CROO-Network/node-sdk
 - Agent Store: https://agent.croo.network/
 - MCP config template: `mcp/croo.mcp.example.json`
-
-## Status
-
-Floatline is live on CROO Agent Store with the CAP provider wired through `@croo-network/sdk`. The provider currently supports `floatline.score` and `floatline.advance.quote`; transaction-bearing advance execution is the next on-chain service.

@@ -24,10 +24,10 @@ The live DoraHacks BUIDL page has many entries in:
 
 Floatline is positioned as agent working capital / invoice financing, which appears meaningfully separate from those clusters.
 
-## Build Priorities
+## Build Status
 
-1. Structured quote, advance, repayment, and status schemas.
-2. CAP provider integration with `@croo-network/sdk`.
-3. Fund-transfer repayment service using real CAP order flow.
-4. Persistent loan state with CAP order IDs and transaction hashes.
-5. README and Agent Store assets for DoraHacks submission.
+1. Live `floatline.score` service for paid CAP credit checks.
+2. Live `floatline.advance.quote` service for paid working-capital quote decisions.
+3. CAP provider integration with `@croo-network/sdk`, WebSocket order events, negotiation acceptance, and paid order delivery.
+4. Public README, MIT license, Agent Store assets, and setup docs for DoraHacks submission.
+5. Next milestone: transaction-bearing `floatline.advance.execute` and `floatline.repay` services with persistent loan state and CAP receipt tracking.

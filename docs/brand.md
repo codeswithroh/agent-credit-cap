@@ -20,10 +20,10 @@ Floatline quotes USDC working-capital advances against paid CAP order flow, help
 
 ## Service Names
 
-- `floatline.quote`
-- `floatline.advance`
-- `floatline.repay`
-- `floatline.status`
+- `floatline.score`
+- `floatline.advance.quote`
+- `floatline.advance.execute` (next transaction-bearing milestone)
+- `floatline.repay` (next transaction-bearing milestone)
 
 ## Logo Assets
 
